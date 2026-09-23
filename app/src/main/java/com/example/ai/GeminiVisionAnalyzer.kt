@@ -48,13 +48,36 @@ class GeminiVisionAnalyzer : VisionAnalyzer {
         val groqKey = when {
             apiKeyOverride?.startsWith("gsk_") == true -> apiKeyOverride
             else -> try { BuildConfig.GROQ_API_KEY } catch (_: Exception) { "" }
-        }.takeIf { it.isNotBlank() && it != "MY_GROQ_API_KEY" }
+        }.takeIf { it.startsWith("gsk_") }
 
         val geminiKey = when {
             apiKeyOverride?.startsWith("gsk_") == true -> try { BuildConfig.GEMINI_API_KEY } catch (_: Exception) { "" }
             apiKeyOverride?.isNotBlank() == true -> apiKeyOverride
             else -> try { BuildConfig.GEMINI_API_KEY } catch (_: Exception) { "" }
-        }.takeIf { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }
+        }.takeIf { it.startsWith("AIza") || it.startsWith("AQ.") }
+
+        // If no valid AI key exists, guide user directly instead of waiting for failed network timeouts
+        if (groqKey == null && geminiKey == null) {
+            Log.w("VisionAnalyzer", "No valid Groq (gsk_...) or Gemini (AIza.../AQ...) API key configured.")
+            val now = LocalDate.now()
+            val formattedDate = now.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.US))
+            val defaultCat = categories.firstOrNull() ?: Category.DEFAULT_CATEGORIES.first()
+            return@withContext ExtractedMemory(
+                title = "Captured Memory (Key Needed)",
+                description = "Screen captured at $formattedDate. Configure your free Groq API key in Settings for 0.25s automatic extraction.",
+                type = MemoryType.NOTE,
+                suggestedCategoryId = defaultCat.id,
+                categoryName = defaultCat.name,
+                date = formattedDate,
+                time = null,
+                isDeadline = false,
+                summary = "AI Vision unconfigured. Open Settings -> AI Vision Engine to paste your free Groq key.",
+                confidence = 0.5f,
+                hasAmbiguity = true,
+                ambiguityQuestion = "Add your Groq API key in Settings to activate instant 0.25s VLM extraction.",
+                ambiguityOptions = listOf("Open Settings to Add Key", "Save as Note")
+            )
+        }
 
         // 2. Attempt Groq VLM first if configured (sub-second 0.25s inference)
         if (groqKey != null) {

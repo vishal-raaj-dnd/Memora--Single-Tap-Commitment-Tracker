@@ -258,6 +258,11 @@ class FloatingReviewModal(
                     updateChipStyle(isSelected)
 
                     setOnClickListener {
+                        if (option.contains("Settings") || option.contains("Key")) {
+                            dismiss()
+                            onOpenInApp()
+                            return@setOnClickListener
+                        }
                         chipViews.forEach { it.background = GradientDrawable().apply {
                             setColor(Color.WHITE)
                             cornerRadius = dp(10f).toFloat()
