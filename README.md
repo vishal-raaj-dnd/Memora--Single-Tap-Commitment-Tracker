@@ -1,11 +1,44 @@
+<div align="center">
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                                                                        │
+│   ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗  █████╗               │
+│   ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗██╔══██╗              │
+│   ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝███████║              │
+│   ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║██║   ██║██╔══██╗██╔══██║              │
+│   ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║  ██║██║  ██║              │
+│   ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝              │
+│                                                                        │
+│   ⚡ Ambient AI Memory Layer for Android                                │
+│   ⚡ Instant Screen Capture • Groq Vision (0.25s) • Google Gemini AI    │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
 # Memora — Ambient AI Memory Layer for Android
 
-> **An ambient AI memory layer for your phone. Capture deadlines, events, and tasks from your screen with a single tap using Groq & Gemini VLM—without ever leaving your active app.**
+> **Capture deadlines, events, and tasks from your screen with a single tap using Groq & Gemini VLM—without ever leaving your active app.**
 
 [![Direct APK Download](https://img.shields.io/badge/Direct_Download-Memora.apk-00E599?style=for-the-badge&logo=android&logoColor=black)](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/raw/main/Memora.apk)
 [![Repository File](https://img.shields.io/badge/GitHub-Memora.apk-FFE500?style=for-the-badge&logo=github&logoColor=black)](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/blob/main/Memora.apk)
 [![Platform](https://img.shields.io/badge/Platform-Android_9.0+-FF5722?style=for-the-badge&logo=android&logoColor=white)](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
+</div>
+
+---
+
+## 📱 App Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/memora_home_page.jpeg" width="45%" alt="Memora Home Screen" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/memora_schedule_page.jpeg" width="45%" alt="Memora Schedule Screen" />
+</p>
+<p align="center">
+  <em><b>Left:</b> Neo-Brutalist Home Dashboard with Floating AI Capture Toggle & Category Breakdown &nbsp;|&nbsp; <b>Right:</b> Structured Timeline & Daily Schedule View with Time Anchors</em>
+</p>
 
 ---
 
