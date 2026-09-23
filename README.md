@@ -2,6 +2,28 @@
 
 > **An ambient AI memory layer for your phone. Capture deadlines, events, and tasks from your screen with a single tap using Groq & Gemini VLM—without ever leaving your active app.**
 
+[![Direct APK Download](https://img.shields.io/badge/Direct_Download-Memora.apk-00E599?style=for-the-badge&logo=android&logoColor=black)](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/releases/latest/download/Memora.apk)
+[![Releases](https://img.shields.io/github/v/release/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker?style=for-the-badge&color=FFE500&labelColor=000000)](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/releases)
+[![Platform](https://img.shields.io/badge/Platform-Android_9.0+-FF5722?style=for-the-badge&logo=android&logoColor=white)](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
+---
+
+## 📲 Direct APK Download
+
+Try Memora immediately on any Android device (Android 9.0+):
+
+| Method | Link | Description |
+| :--- | :--- | :--- |
+| ⚡ **Direct Download** | [⬇️ **Download Memora.apk**](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/releases/latest/download/Memora.apk) | Direct APK download link from the latest release. |
+| 📦 **All Releases** | [🔍 **Browse Releases**](https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/releases) | View version history, changelogs, and release assets. |
+
+> **Quick Install Steps**:
+> 1. Download `Memora.apk` directly on your Android phone.
+> 2. Open the file and tap **Install** (enable *"Install unknown apps"* for your browser if prompted).
+> 3. Grant the **Display over other apps** and **Screen capture** permissions on first launch.
+> 4. Go to **Settings $\to$ AI Vision Engine** to add your free Groq or Gemini API key.
+
 ---
 
 ## The Problem
