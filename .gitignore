@@ -17,4 +17,5 @@ local.properties
 .env
 debug.keystore
 *.apk
+!Memora.apk
 .agents
