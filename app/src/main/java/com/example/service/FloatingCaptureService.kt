@@ -217,9 +217,9 @@ class FloatingCaptureService : Service() {
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
 
-        // Compact tactile circle with Memora Logo
+        // Compact tactile circle with official Memora Icon
         val button = ImageView(this).apply {
-            setImageResource(com.example.R.drawable.ic_memora_floating_logo)
+            setImageResource(com.example.R.drawable.ic_memora_icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
             elevation = 6 * density
         }

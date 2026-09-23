@@ -1,5 +1,8 @@
 <div align="center">
 
+<img src="docs/assets/memora_logo.png" width="180" alt="Memora Logo" />
+<br><br>
+
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
 │                                                                        │

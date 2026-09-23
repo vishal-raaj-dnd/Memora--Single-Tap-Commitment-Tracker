@@ -110,22 +110,34 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "Memora",
-                            style = Typography.displayMedium.copy(
-                                fontWeight = FontWeight.Black,
-                                fontSize = 28.sp,
-                                color = BlackInk
-                            )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_memora_icon),
+                            contentDescription = "Memora Logo",
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
                         )
-                        Text(
-                            text = "See it. Capture it. Remember it.",
-                            style = Typography.bodySmall.copy(
-                                color = GrayText,
-                                fontSize = 13.sp
+                        Column {
+                            Text(
+                                text = "Memora",
+                                style = Typography.displayMedium.copy(
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 26.sp,
+                                    color = BlackInk
+                                )
                             )
-                        )
+                            Text(
+                                text = "See it. Capture it. Remember it.",
+                                style = Typography.bodySmall.copy(
+                                    color = GrayText,
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
                     }
 
                     // Avatar button
