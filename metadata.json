@@ -1,0 +1,6 @@
+{
+  "name": "Memora",
+  "description": "AI-powered capture and remember memory assistant with neo-brutalist styling",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

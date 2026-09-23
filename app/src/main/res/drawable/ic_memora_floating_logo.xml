@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Memora Yellow Circle Background -->
+    <path
+        android:fillColor="#FFD92F"
+        android:strokeColor="#111111"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round"
+        android:pathData="M 24,4 A 20,20 0 1,1 23.99,4 Z" />
+
+    <!-- Aperture Blades (6 Interlocking Neo-Brutalist Black Segments) -->
+    <!-- Blade 1: Top to Center-Right -->
+    <path
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 24,4 L 28,19" />
+
+    <!-- Blade 2: Top-Right to Bottom-Right -->
+    <path
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 41.3,14 L 30,27" />
+
+    <!-- Blade 3: Bottom-Right to Bottom -->
+    <path
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 41.3,34 L 23,31" />
+
+    <!-- Blade 4: Bottom to Center-Left -->
+    <path
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 24,44 L 20,29" />
+
+    <!-- Blade 5: Bottom-Left to Top-Left -->
+    <path
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 6.7,34 L 18,21" />
+
+    <!-- Blade 6: Top-Left to Top -->
+    <path
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M 6.7,14 L 25,17" />
+
+    <!-- Central Aperture Hexagon -->
+    <path
+        android:fillColor="#FFD92F"
+        android:strokeColor="#111111"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round"
+        android:pathData="M 25,17 L 28,19 L 30,27 L 23,31 L 20,29 L 18,21 Z" />
+
+    <!-- Memory Star Accent inside Central Aperture -->
+    <path
+        android:fillColor="#111111"
+        android:pathData="M 24,22 L 24.8,23.8 L 26.8,24 L 25.2,25.4 L 25.7,27.3 L 24,26.3 L 22.3,27.3 L 22.8,25.4 L 21.2,24 L 23.2,23.8 Z" />
+
+</vector>
