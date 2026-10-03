@@ -1,9 +1,11 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,26 +21,33 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,54 +55,203 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.ui.components.CategoryLineIcon
+import com.example.data.model.MemoryItem
+import com.example.ui.components.CommitmentCard
+import com.example.ui.components.CommitmentDialog
 import com.example.ui.components.NeoButton
 import com.example.ui.components.NeoCard
 import com.example.ui.components.NeoDottedBackground
-import com.example.ui.components.StatBlock
+import com.example.ui.components.ProfileCustomizerDialog
+import com.example.ui.components.UserProfileAvatar
+import com.example.ui.components.VoiceCaptureDialog
 import com.example.ui.theme.BlackInk
+import com.example.ui.theme.CreamBackground
 import com.example.ui.theme.GrayText
+import com.example.ui.theme.LightGray
 import com.example.ui.theme.MainYellow
 import com.example.ui.theme.PastelBlue
 import com.example.ui.theme.PastelCoral
-import com.example.ui.theme.PastelLavender
 import com.example.ui.theme.PastelMint
-import com.example.ui.theme.PastelPeach
 import com.example.ui.theme.PastelYellow
+import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.Typography
 import com.example.ui.theme.WarmWhite
 import com.example.ui.viewmodel.MemoraViewModel
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import com.example.util.DateUtils
 
+/**
+ * Restructured, lightning-fast Neo-Brutalist Home Screen.
+ * Solves UX friction by providing:
+ * 1. Prominent Voice Commitment Capture (🎙️ Speak & Add) with Sarvam & Groq AI
+ * 2. Instant inline task creation & editing (✏️)
+ * 3. 1-Tap Checkbox completion toggles (✅)
+ * 4. Dedicated Today's Focus & Upcoming Horizon (zero completed clutter)
+ * 5. Distinct Settings vs Profile customizer triggers
+ * 6. Clean, responsive top action dock
+ */
 @Composable
 fun HomeScreen(
     viewModel: MemoraViewModel,
     onNavigateToCapture: () -> Unit,
     onNavigateToDetail: (Long) -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToFriends: () -> Unit,
+    onNavigateToFriends: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val memories by viewModel.allMemories.collectAsState()
     val categories by viewModel.allCategories.collectAsState()
-    val stats by viewModel.memoryStats.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
+    val sarvamKey by viewModel.sarvamApiKey.collectAsState()
 
-    val todayMemories = memories.filter {
-        com.example.util.DateUtils.isToday(it.date)
-    }.take(4)
+    // Dialog states
+    var showVoiceDialog by remember { mutableStateOf(false) }
+    var showCommitmentDialog by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
+    var editingItem by remember { mutableStateOf<MemoryItem?>(null) }
+    var deletingItem by remember { mutableStateOf<MemoryItem?>(null) }
 
-    val tomorrowMemories = memories.filter {
-        it !in todayMemories && com.example.util.DateUtils.isTomorrow(it.date)
-    }.take(4)
+    // Filter and search states - Default focused on Today!
+    var selectedFilterTab by remember { mutableStateOf("Today") }
+    var searchQuery by remember { mutableStateOf("") }
+    var showCompletedDrawer by remember { mutableStateOf(false) }
 
-    val upcomingMemories = memories.filter {
-        it !in todayMemories && it !in tomorrowMemories
-    }.take(4)
+    // Pure active commitments for home page (no completed clutter)
+    val pendingMemories = memories.filter { !it.isCompleted }
+    val completedMemories = memories.filter { it.isCompleted }
+    val overdueMemories = memories.filter { !it.isCompleted && DateUtils.isOverdue(it.date, false) }
+    val todayMemories = memories.filter { !it.isCompleted && !DateUtils.isOverdue(it.date, false) && DateUtils.isToday(it.date) }
+    val upcomingMemories = memories.filter { !it.isCompleted && !DateUtils.isOverdue(it.date, false) && !DateUtils.isToday(it.date) }
+    val overdueCount = overdueMemories.size
+
+    val activeBaseList = when (selectedFilterTab) {
+        "Today" -> todayMemories + overdueMemories
+        "Upcoming" -> upcomingMemories
+        else -> pendingMemories
+    }
+
+    val filteredList = activeBaseList.filter { item ->
+        searchQuery.isBlank() ||
+                item.title.contains(searchQuery, ignoreCase = true) ||
+                (item.notes?.contains(searchQuery, ignoreCase = true) == true) ||
+                (item.categoryId.contains(searchQuery, ignoreCase = true))
+    }
+
+    // Profile Customizer Dialog
+    if (showProfileDialog) {
+        ProfileCustomizerDialog(
+            initialName = userName,
+            initialRole = userRole,
+            initialAvatar = userAvatar,
+            onDismiss = { showProfileDialog = false },
+            onSave = { name, role, avatarKey ->
+                viewModel.updateProfile(name, role, avatarKey)
+                showProfileDialog = false
+            }
+        )
+    }
+
+    // Voice Capture Dialog
+    if (showVoiceDialog) {
+        VoiceCaptureDialog(
+            categories = categories,
+            onDismiss = { showVoiceDialog = false },
+            onParseVoice = { text, engine -> viewModel.parseVoiceInput(text, engine) },
+            onTranscribeAudio = { file, engine -> viewModel.transcribeAndParseAudio(file, engine) },
+            hasSarvamKey = sarvamKey.isNotBlank(),
+            onSaveCommitment = { title, catId, type, date, time, notes, isDeadline, reminder ->
+                viewModel.saveVoiceCommitment(
+                    title = title,
+                    categoryId = catId,
+                    type = type,
+                    date = date,
+                    time = time,
+                    notes = notes,
+                    isDeadline = isDeadline,
+                    reminderTime = reminder,
+                    onSaved = { showVoiceDialog = false }
+                )
+            }
+        )
+    }
+
+    // Add / Edit Commitment Dialog
+    if (showCommitmentDialog) {
+        CommitmentDialog(
+            categories = categories,
+            existingItem = editingItem,
+            onDismiss = {
+                showCommitmentDialog = false
+                editingItem = null
+            },
+            onSave = { title, catId, type, date, time, notes, reminder ->
+                val currentEdit = editingItem
+                if (currentEdit != null) {
+                    viewModel.updateMemoryDetails(
+                        id = currentEdit.id,
+                        title = title,
+                        categoryId = catId,
+                        type = type,
+                        date = date,
+                        time = time,
+                        notes = notes,
+                        reminderTime = reminder
+                    )
+                } else {
+                    viewModel.createManualMemory(
+                        title = title,
+                        categoryId = catId,
+                        type = type,
+                        date = date,
+                        time = time,
+                        notes = notes,
+                        reminderTime = reminder,
+                        onSaved = {}
+                    )
+                }
+                showCommitmentDialog = false
+                editingItem = null
+            }
+        )
+    }
+
+    // Delete Confirmation Dialog
+    if (deletingItem != null) {
+        val target = deletingItem!!
+        AlertDialog(
+            onDismissRequest = { deletingItem = null },
+            title = {
+                Text(
+                    text = "Delete Commitment",
+                    style = Typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to delete \"${target.title}\"? This action cannot be undone.",
+                    style = Typography.bodyMedium.copy(color = BlackInk)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteMemory(target)
+                        deletingItem = null
+                    }
+                ) {
+                    Text("Delete", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingItem = null }) {
+                    Text("Cancel", color = GrayText)
+                }
+            },
+            containerColor = CreamBackground,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
     NeoDottedBackground(modifier = modifier) {
         LazyColumn(
@@ -101,9 +259,9 @@ fun HomeScreen(
                 .fillMaxSize()
                 .statusBarsPadding(),
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Header: Memora + avatar
+            // Header: Memora Branding + Greeting + Settings
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -118,7 +276,7 @@ fun HomeScreen(
                             painter = painterResource(id = R.drawable.ic_memora_icon),
                             contentDescription = "Memora Logo",
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(42.dp)
                                 .clip(RoundedCornerShape(12.dp))
                         )
                         Column {
@@ -126,141 +284,352 @@ fun HomeScreen(
                                 text = "Memora",
                                 style = Typography.displayMedium.copy(
                                     fontWeight = FontWeight.Black,
-                                    fontSize = 26.sp,
+                                    fontSize = 24.sp,
                                     color = BlackInk
                                 )
                             )
                             Text(
-                                text = "See it. Capture it. Remember it.",
+                                text = "Hi, $userName",
                                 style = Typography.bodySmall.copy(
                                     color = GrayText,
-                                    fontSize = 12.sp
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             )
                         }
                     }
 
-                    // Avatar button
-                    Box(
-                        modifier = Modifier
-                            .testTag("home_avatar_button")
-                            .clickable { onNavigateToSettings() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        com.example.ui.components.UserProfileAvatar(avatarKey = userAvatar, size = 46.dp)
-                    }
-                }
-            }
-
-            // Yellow Greeting Card (Zero emojis)
-            item {
-                NeoCard(
-                    backgroundColor = MainYellow,
-                    cornerRadius = 20.dp,
-                    shadowOffset = 3.dp,
-                    testTag = "greeting_card"
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)
-                    ) {
-                        Text(
-                            text = "Hi, $userName",
-                            style = Typography.headlineMedium.copy(
-                                fontWeight = FontWeight.Black,
-                                fontSize = 21.sp,
-                                color = BlackInk
-                            )
-                        )
-                        if (userRole.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = userRole,
-                                style = Typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = BlackInk.copy(alpha = 0.7f),
-                                    fontSize = 12.sp
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Nothing slips away now.",
-                            style = Typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Medium,
-                                color = BlackInk.copy(alpha = 0.85f),
-                                fontSize = 14.sp
-                            )
-                        )
-                    }
-                }
-            }
-
-            // Highlighted Camera CTA Card
-            item {
-                NeoCard(
-                    backgroundColor = WarmWhite,
-                    cornerRadius = 20.dp,
-                    shadowOffset = 3.dp,
-                    onClick = onNavigateToCapture,
-                    testTag = "home_tap_to_capture_card"
-                ) {
+                    // Settings & Avatar actions
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .background(PastelYellow, RoundedCornerShape(14.dp))
-                                .border(1.75.dp, BlackInk, RoundedCornerShape(14.dp)),
+                                .size(38.dp)
+                                .background(WarmWhite, CircleShape)
+                                .border(1.5.dp, BlackInk, CircleShape)
+                                .clip(CircleShape)
+                                .clickable { onNavigateToSettings() },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Camera",
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings",
                                 tint = BlackInk,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Box(
+                            modifier = Modifier
+                                .testTag("home_avatar_button")
+                                .clickable { showProfileDialog = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            UserProfileAvatar(avatarKey = userAvatar, size = 40.dp)
+                        }
+                    }
+                }
+            }
 
-                        Column(modifier = Modifier.weight(1f)) {
+            // Top Quick Action Hub (Front & Center!)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. Voice Capture Hero Button
+                    Box(
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .background(MainYellow, RoundedCornerShape(16.dp))
+                            .border(2.dp, BlackInk, RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { showVoiceDialog = true }
+                            .padding(vertical = 12.dp, horizontal = 12.dp)
+                            .testTag("home_voice_action_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice",
+                                tint = BlackInk,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Tap to capture",
-                                style = Typography.titleMedium.copy(
+                                text = "Voice Add",
+                                style = Typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 14.sp,
+                                    color = BlackInk
+                                )
+                            )
+                        }
+                    }
+
+                    // 2. Quick Task Add Button
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(WarmWhite, RoundedCornerShape(16.dp))
+                            .border(2.dp, BlackInk, RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                editingItem = null
+                                showCommitmentDialog = true
+                            }
+                            .padding(vertical = 12.dp, horizontal = 10.dp)
+                            .testTag("home_add_task_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add",
+                                tint = BlackInk,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Add Task",
+                                style = Typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                            )
-                            Text(
-                                text = "anything on your screen",
-                                style = Typography.bodySmall.copy(
-                                    color = GrayText,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
+                                    color = BlackInk
                                 )
                             )
                         }
+                    }
 
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = "Capture Arrow",
-                            tint = BlackInk,
-                            modifier = Modifier.size(16.dp)
+                    // 3. Screen Capture Button
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(PastelYellow, RoundedCornerShape(16.dp))
+                            .border(2.dp, BlackInk, RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onNavigateToCapture() }
+                            .padding(vertical = 12.dp, horizontal = 10.dp)
+                            .testTag("home_capture_nav_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Screen",
+                                tint = BlackInk,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Screen",
+                                style = Typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = BlackInk
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Compact Live Metrics Strip
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(WarmWhite, RoundedCornerShape(14.dp))
+                        .border(1.5.dp, BlackInk, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📌 ${pendingMemories.size} Pending",
+                        style = Typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = BlackInk)
+                    )
+                    Box(modifier = Modifier.size(4.dp).background(GrayText, CircleShape))
+                    Text(
+                        text = "✅ ${completedMemories.size} Done",
+                        style = Typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = SuccessGreen)
+                    )
+                    if (overdueCount > 0) {
+                        Box(modifier = Modifier.size(4.dp).background(GrayText, CircleShape))
+                        Text(
+                            text = "⏰ $overdueCount Overdue",
+                            style = Typography.labelSmall.copy(fontWeight = FontWeight.Black, color = Color.Red)
                         )
                     }
                 }
             }
 
-            // PURE EMPTY STATE ON FIRST RUN (Specification 4 & 13)
-            if (memories.isEmpty()) {
+            // Search Bar (Compact & Sleek)
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search commitments...", fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = BlackInk,
+                        unfocusedIndicatorColor = GrayText.copy(alpha = 0.5f),
+                        focusedContainerColor = WarmWhite,
+                        unfocusedContainerColor = WarmWhite
+                    )
+                )
+            }
+
+            // Interactive Focused Tabs: Today, Upcoming, All Active (zero completed clutter)
+            item {
+                val tabs = listOf(
+                    "Today" to (todayMemories.size + overdueCount),
+                    "Upcoming" to upcomingMemories.size,
+                    "All Active" to pendingMemories.size
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    tabs.forEach { (tabName, count) ->
+                        val isSelected = selectedFilterTab == tabName
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (isSelected) BlackInk else WarmWhite,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { selectedFilterTab = tabName }
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                                .testTag("filter_tab_$tabName"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$tabName ($count)",
+                                style = Typography.labelSmall.copy(
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+                                    color = if (isSelected) MainYellow else BlackInk,
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Contextual Hero Focus Card
+            item {
+                when (selectedFilterTab) {
+                    "Today" -> {
+                        NeoCard(
+                            backgroundColor = if (overdueCount > 0) PastelCoral.copy(alpha = 0.25f) else PastelYellow.copy(alpha = 0.45f),
+                            cornerRadius = 16.dp,
+                            shadowOffset = 2.dp
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(if (overdueCount > 0) PastelCoral else MainYellow, CircleShape)
+                                        .border(1.5.dp, BlackInk, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (overdueCount > 0) "⚠️" else "🎯",
+                                        fontSize = 18.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (overdueCount > 0) "Overdue & Today's Commitments" else "Today's Focus",
+                                        style = Typography.titleSmall.copy(fontWeight = FontWeight.Black, color = BlackInk)
+                                    )
+                                    Text(
+                                        text = when {
+                                            overdueCount > 0 -> "$overdueCount overdue + ${todayMemories.size} scheduled for today."
+                                            todayMemories.isNotEmpty() -> "${todayMemories.size} commitments to conquer today."
+                                            else -> "No tasks scheduled for today! You're completely caught up."
+                                        },
+                                        style = Typography.bodySmall.copy(fontSize = 12.sp, color = BlackInk.copy(alpha = 0.8f))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    "Upcoming" -> {
+                        NeoCard(
+                            backgroundColor = PastelBlue.copy(alpha = 0.35f),
+                            cornerRadius = 16.dp,
+                            shadowOffset = 2.dp
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(PastelBlue, CircleShape)
+                                        .border(1.5.dp, BlackInk, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = "📅", fontSize = 18.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Upcoming Horizon",
+                                        style = Typography.titleSmall.copy(fontWeight = FontWeight.Black, color = BlackInk)
+                                    )
+                                    Text(
+                                        text = if (upcomingMemories.isNotEmpty())
+                                            "${upcomingMemories.size} scheduled commitments on your radar."
+                                        else
+                                            "No future commitments logged yet.",
+                                        style = Typography.bodySmall.copy(fontSize = 12.sp, color = BlackInk.copy(alpha = 0.8f))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Commitments List
+            if (filteredList.isEmpty()) {
                 item {
                     NeoCard(
                         backgroundColor = WarmWhite,
                         cornerRadius = 20.dp,
-                        shadowOffset = 3.dp
+                        shadowOffset = 2.5.dp
                     ) {
                         Column(
                             modifier = Modifier
@@ -270,372 +639,130 @@ fun HomeScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(56.dp)
+                                    .size(52.dp)
                                     .background(PastelYellow, CircleShape)
                                     .border(2.dp, BlackInk, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Search,
+                                    imageVector = Icons.Default.Mic,
                                     contentDescription = null,
                                     tint = BlackInk,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
 
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Text(
+                                text = if (memories.isEmpty()) "No commitments yet" else "No matching commitments",
+                                style = Typography.titleMedium.copy(fontWeight = FontWeight.Black, fontSize = 17.sp),
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = if (memories.isEmpty())
+                                    "Speak your first commitment or tap '+ Add Task' to get started."
+                                else "Try clearing your search or switching filter tabs.",
+                                style = Typography.bodySmall.copy(color = GrayText, textAlign = TextAlign.Center)
+                            )
+
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            Text(
-                                text = "Nothing to remember yet.",
-                                style = Typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 18.sp,
-                                    color = BlackInk
-                                ),
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Text(
-                                text = "Capture something important\nand Memora will organize it for you.",
-                                style = Typography.bodyMedium.copy(
-                                    color = GrayText,
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp
-                                ),
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            NeoButton(
-                                text = "Capture",
-                                onClick = onNavigateToCapture,
-                                modifier = Modifier.fillMaxWidth(0.6f)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(0.9f),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                NeoButton(
+                                    text = "🎙️ Speak Now",
+                                    onClick = { showVoiceDialog = true },
+                                    backgroundColor = MainYellow,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                NeoButton(
+                                    text = "+ Add Task",
+                                    onClick = {
+                                        editingItem = null
+                                        showCommitmentDialog = true
+                                    },
+                                    backgroundColor = WarmWhite,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
             } else {
-                // Dynamically calculated live metrics (Only when actual items exist)
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            StatBlock(
-                                percentage = stats.taskPercentage,
-                                title = "Tasks (${stats.taskCount})",
-                                icon = Icons.Outlined.CheckCircle,
-                                backgroundColor = PastelCoral,
-                                modifier = Modifier.weight(1f)
-                            )
-                            StatBlock(
-                                percentage = stats.eventPercentage,
-                                title = "Events (${stats.eventCount})",
-                                icon = Icons.Outlined.CalendarMonth,
-                                backgroundColor = PastelMint,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            StatBlock(
-                                percentage = stats.deadlinePercentage,
-                                title = "Deadlines (${stats.deadlineCount})",
-                                icon = Icons.Outlined.Timer,
-                                backgroundColor = PastelLavender,
-                                modifier = Modifier.weight(1f)
-                            )
-                            StatBlock(
-                                percentage = stats.notePercentage,
-                                title = "Notes (${stats.noteCount})",
-                                icon = Icons.Outlined.Description,
-                                backgroundColor = PastelPeach,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
+                items(filteredList, key = { it.id }) { item ->
+                    val category = categories.find { it.id == item.categoryId }
+                    CommitmentCard(
+                        item = item,
+                        category = category,
+                        onToggleComplete = { viewModel.toggleComplete(item) },
+                        onEdit = {
+                            editingItem = item
+                            showCommitmentDialog = true
+                        },
+                        onDelete = { deletingItem = item },
+                        onClick = { onNavigateToDetail(item.id) }
+                    )
                 }
+            }
 
-                // Section "Today"
+            // Completed Archive (Collapsible, neat & non-intrusive)
+            if (completedMemories.isNotEmpty()) {
                 item {
-                    Row(
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable { showCompletedDrawer = !showCompletedDrawer }
                     ) {
-                        Text(
-                            text = "Today",
-                            style = Typography.titleLarge.copy(
-                                fontWeight = FontWeight.Black,
-                                fontSize = 19.sp
-                            )
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .background(WarmWhite, CircleShape)
-                                .border(1.5.dp, BlackInk, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${todayMemories.size}",
-                                style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-                }
-
-                if (todayMemories.isNotEmpty()) {
-                    items(todayMemories) { item ->
-                        val category = categories.find { it.id == item.categoryId }
-                        val catColor = try {
-                            if (category != null) Color(android.graphics.Color.parseColor(category.colorHex)) else PastelBlue
-                        } catch (_: Exception) {
-                            PastelBlue
-                        }
-
                         NeoCard(
                             backgroundColor = WarmWhite,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 2.dp,
-                            onClick = { onNavigateToDetail(item.id) },
-                            testTag = "today_item_${item.id}"
+                            cornerRadius = 14.dp,
+                            shadowOffset = 2.dp
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(catColor, RoundedCornerShape(12.dp))
-                                        .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CategoryLineIcon(
-                                        iconKey = category?.icon,
-                                        size = 20.dp
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.title,
-                                        style = Typography.bodyLarge.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = BlackInk
-                                        )
-                                    )
-                                    Text(
-                                        text = category?.name ?: "General",
-                                        style = Typography.bodySmall.copy(
-                                            color = GrayText,
-                                            fontSize = 12.sp
-                                        )
-                                    )
-                                }
-
-                                if (!item.time.isNullOrBlank()) {
-                                    Text(
-                                        text = item.time,
-                                        style = Typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = BlackInk,
-                                            fontSize = 12.sp
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Section "Tomorrow"
-                if (tomorrowMemories.isNotEmpty()) {
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Tomorrow",
-                                style = Typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 19.sp
-                                )
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .background(WarmWhite, CircleShape)
-                                    .border(1.5.dp, BlackInk, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${tomorrowMemories.size}",
-                                    style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                        }
-                    }
-
-                    items(tomorrowMemories) { item ->
-                        val category = categories.find { it.id == item.categoryId }
-                        val catColor = try {
-                            if (category != null) Color(android.graphics.Color.parseColor(category.colorHex)) else PastelBlue
-                        } catch (_: Exception) {
-                            PastelBlue
-                        }
-
-                        NeoCard(
-                            backgroundColor = WarmWhite,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 2.dp,
-                            onClick = { onNavigateToDetail(item.id) },
-                            testTag = "tomorrow_item_${item.id}"
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(catColor, RoundedCornerShape(12.dp))
-                                        .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CategoryLineIcon(
-                                        iconKey = category?.icon,
-                                        size = 20.dp
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.title,
-                                        style = Typography.bodyLarge.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = BlackInk
-                                        )
-                                    )
-                                    Text(
-                                        text = category?.name ?: "General",
-                                        style = Typography.bodySmall.copy(
-                                            color = GrayText,
-                                            fontSize = 12.sp
-                                        )
-                                    )
-                                }
-
-                                if (!item.time.isNullOrBlank()) {
-                                    Text(
-                                        text = item.time,
-                                        style = Typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = BlackInk,
-                                            fontSize = 12.sp
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Section "Upcoming"
-                if (upcomingMemories.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Upcoming",
-                            style = Typography.titleLarge.copy(
-                                fontWeight = FontWeight.Black,
-                                fontSize = 19.sp
-                            ),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-
-                    items(upcomingMemories) { item ->
-                        val category = categories.find { it.id == item.categoryId }
-                        val catColor = try {
-                            if (category != null) Color(android.graphics.Color.parseColor(category.colorHex)) else PastelBlue
-                        } catch (_: Exception) {
-                            PastelBlue
-                        }
-
-                        NeoCard(
-                            backgroundColor = WarmWhite,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 2.dp,
-                            onClick = { onNavigateToDetail(item.id) }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .background(catColor, RoundedCornerShape(10.dp))
-                                            .border(1.5.dp, BlackInk, RoundedCornerShape(10.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CategoryLineIcon(
-                                            iconKey = category?.icon,
-                                            size = 18.dp
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = item.title,
-                                            style = Typography.bodyMedium.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp
-                                            )
-                                        )
-                                        Text(
-                                            text = category?.name ?: "",
-                                            style = Typography.bodySmall.copy(fontSize = 12.sp, color = GrayText)
-                                        )
-                                    }
-                                }
-
-                                Text(
-                                    text = item.date ?: "Upcoming",
-                                    style = Typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = BlackInk
+                                    Text(text = "✅", fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Completed Archive (${completedMemories.size})",
+                                        style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = BlackInk)
                                     )
+                                }
+                                Text(
+                                    text = if (showCompletedDrawer) "Hide ▲" else "View ▼",
+                                    style = Typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = GrayText)
                                 )
                             }
                         }
+                    }
+                }
+
+                if (showCompletedDrawer) {
+                    items(completedMemories, key = { "completed_${it.id}" }) { item ->
+                        val category = categories.find { it.id == item.categoryId }
+                        CommitmentCard(
+                            item = item,
+                            category = category,
+                            onToggleComplete = { viewModel.toggleComplete(item) },
+                            onEdit = {
+                                editingItem = item
+                                showCommitmentDialog = true
+                            },
+                            onDelete = { deletingItem = item },
+                            onClick = { onNavigateToDetail(item.id) }
+                        )
                     }
                 }
             }

@@ -28,10 +28,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,10 +58,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -64,11 +74,25 @@ import com.example.ui.components.NeoDottedBackground
 import com.example.ui.theme.BlackInk
 import com.example.ui.theme.CreamBackground
 import com.example.ui.theme.GrayText
+import com.example.ui.theme.LightGray
 import com.example.ui.theme.MainYellow
+import com.example.ui.theme.PastelCoral
+import com.example.ui.theme.PastelMint
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.Typography
 import com.example.ui.theme.WarmWhite
 import com.example.ui.viewmodel.MemoraViewModel
+
+private fun maskApiKey(key: String, prefixLen: Int = 4, suffixLen: Int = 4): String {
+    val trimmed = key.trim()
+    if (trimmed.isBlank() || trimmed == "MY_GROQ_API_KEY" || trimmed == "MY_SARVAM_API_KEY" || trimmed == "MY_GEMINI_API_KEY") {
+        return "Not configured"
+    }
+    if (trimmed.length <= prefixLen + suffixLen) {
+        return "••••••••"
+    }
+    return "${trimmed.take(prefixLen)}••••••••${trimmed.takeLast(suffixLen)}"
+}
 
 @Composable
 fun SettingsScreen(
@@ -77,71 +101,298 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val isFloatingServiceEnabled by viewModel.isFloatingServiceEnabled.collectAsState()
     val userApiKey by viewModel.userApiKey.collectAsState()
+    val groqApiKey by viewModel.groqApiKey.collectAsState()
+    val sarvamApiKey by viewModel.sarvamApiKey.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
 
-    var showKeyDialog by remember { mutableStateOf(false) }
-    var tempKey by remember(userApiKey) { mutableStateOf(userApiKey) }
+    var showGroqDialog by remember { mutableStateOf(false) }
+    var tempGroqKey by remember(groqApiKey) { mutableStateOf(groqApiKey) }
+    var isGroqKeyVisible by remember { mutableStateOf(false) }
+
+    var showSarvamDialog by remember { mutableStateOf(false) }
+    var tempSarvamKey by remember(sarvamApiKey) { mutableStateOf(sarvamApiKey) }
+    var isSarvamKeyVisible by remember { mutableStateOf(false) }
 
     var showProfileDialog by remember { mutableStateOf(false) }
     var tempName by remember(userName) { mutableStateOf(userName) }
     var tempRole by remember(userRole) { mutableStateOf(userRole) }
     var selectedAvatarKey by remember(userAvatar) { mutableStateOf(userAvatar) }
 
-    val hasConfiguredKey = (userApiKey.isNotBlank() && userApiKey != "MY_GEMINI_API_KEY") ||
-            try { BuildConfig.GROQ_API_KEY.isNotBlank() && BuildConfig.GROQ_API_KEY != "MY_GROQ_API_KEY" } catch (_: Exception) { false } ||
-            try { BuildConfig.GEMINI_API_KEY.isNotBlank() && BuildConfig.GEMINI_API_KEY != "MY_GEMINI_API_KEY" } catch (_: Exception) { false }
+    val hasGroqKey = (groqApiKey.isNotBlank() && groqApiKey != "MY_GROQ_API_KEY") ||
+            (userApiKey.startsWith("gsk_") && userApiKey != "MY_GROQ_API_KEY")
+    val hasSarvamKey = sarvamApiKey.isNotBlank() && sarvamApiKey != "MY_SARVAM_API_KEY"
 
-    val activeModelDescription = when {
-        userApiKey.startsWith("gsk_") -> "Groq Qwen 27B Vision (0.25s High-Speed)"
-        try { BuildConfig.GROQ_API_KEY.startsWith("gsk_") } catch (_: Exception) { false } -> "Groq Qwen 27B Vision (0.25s High-Speed)"
-        userApiKey.isNotBlank() -> "Gemini 3.5 Flash Lite VLM"
-        else -> "Groq Qwen 27B & Gemini 3.5 Flash Lite"
-    }
-
-    if (showKeyDialog) {
+    if (showGroqDialog) {
         AlertDialog(
-            onDismissRequest = { showKeyDialog = false },
+            onDismissRequest = { showGroqDialog = false },
             title = {
-                Text(
-                    text = "Configure AI Vision Key",
-                    style = Typography.titleLarge.copy(fontWeight = FontWeight.Black)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(MainYellow, CircleShape)
+                            .border(1.5.dp, BlackInk, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = BlackInk,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Groq Cloud API Key",
+                        style = Typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                    )
+                }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Paste your Groq API key (starts with 'gsk_') or Google Gemini key (starts with 'AIza...' or 'AQ.'). Free Groq keys can be generated at console.groq.com.",
-                        style = Typography.bodySmall.copy(color = GrayText)
+                        text = "Powers instant 0.25s screenshot analysis using Qwen 27B Vision. Free API keys can be generated at console.groq.com/keys.",
+                        style = Typography.bodySmall.copy(color = GrayText, lineHeight = 18.sp)
                     )
+
                     OutlinedTextField(
-                        value = tempKey,
-                        onValueChange = { tempKey = it },
-                        label = { Text("AI Vision API Key") },
-                        placeholder = { Text("Paste gsk_... or AIza... key here") },
+                        value = tempGroqKey,
+                        onValueChange = { tempGroqKey = it },
+                        label = { Text("Groq Key (starts with gsk_)") },
+                        placeholder = { Text("gsk_...") },
+                        visualTransformation = if (isGroqKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isGroqKeyVisible = !isGroqKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isGroqKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (isGroqKeyVisible) "Hide key" else "Show key",
+                                    tint = BlackInk
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         colors = TextFieldDefaults.colors(
                             focusedIndicatorColor = BlackInk,
                             unfocusedIndicatorColor = GrayText
                         )
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Paste from Clipboard Button
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(WarmWhite, RoundedCornerShape(12.dp))
+                                .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    val clip = clipboardManager.getText()?.text
+                                    if (!clip.isNullOrBlank()) {
+                                        tempGroqKey = clip.trim()
+                                    }
+                                }
+                                .padding(vertical = 10.dp, horizontal = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentPaste,
+                                    contentDescription = null,
+                                    tint = BlackInk,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Paste Clipboard",
+                                    style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = BlackInk)
+                                )
+                            }
+                        }
+
+                        // Clear Button
+                        if (tempGroqKey.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .background(PastelCoral, RoundedCornerShape(12.dp))
+                                    .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { tempGroqKey = "" }
+                                    .padding(vertical = 10.dp, horizontal = 14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Clear",
+                                    tint = BlackInk,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.updateApiKey(tempKey.trim())
-                        showKeyDialog = false
+                        val key = tempGroqKey.trim()
+                        if (key.isBlank()) {
+                            viewModel.clearGroqApiKey()
+                        } else {
+                            viewModel.updateGroqApiKey(key)
+                        }
+                        showGroqDialog = false
                     }
                 ) {
                     Text("Save Key", fontWeight = FontWeight.Bold, color = BlackInk)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showKeyDialog = false }) {
+                TextButton(onClick = { showGroqDialog = false }) {
+                    Text("Cancel", color = GrayText)
+                }
+            },
+            containerColor = CreamBackground,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    if (showSarvamDialog) {
+        AlertDialog(
+            onDismissRequest = { showSarvamDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(PastelMint, CircleShape)
+                            .border(1.5.dp, BlackInk, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = null,
+                            tint = BlackInk,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Sarvam AI API Key",
+                        style = Typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Powers Indic intelligence and multilingual refinement (Hindi, Tamil, Telugu, Hinglish, college slang, IITM, AMET, Anna Univ, and hackathon schedules). Get your subscription key from dashboard.sarvam.ai.",
+                        style = Typography.bodySmall.copy(color = GrayText, lineHeight = 18.sp)
+                    )
+
+                    OutlinedTextField(
+                        value = tempSarvamKey,
+                        onValueChange = { tempSarvamKey = it },
+                        label = { Text("Sarvam Subscription Key") },
+                        placeholder = { Text("Paste Sarvam key here") },
+                        visualTransformation = if (isSarvamKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isSarvamKeyVisible = !isSarvamKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isSarvamKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (isSarvamKeyVisible) "Hide key" else "Show key",
+                                    tint = BlackInk
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedIndicatorColor = BlackInk,
+                            unfocusedIndicatorColor = GrayText
+                        )
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Paste from Clipboard Button
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(WarmWhite, RoundedCornerShape(12.dp))
+                                .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    val clip = clipboardManager.getText()?.text
+                                    if (!clip.isNullOrBlank()) {
+                                        tempSarvamKey = clip.trim()
+                                    }
+                                }
+                                .padding(vertical = 10.dp, horizontal = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentPaste,
+                                    contentDescription = null,
+                                    tint = BlackInk,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Paste Clipboard",
+                                    style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = BlackInk)
+                                )
+                            }
+                        }
+
+                        // Clear Button
+                        if (tempSarvamKey.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .background(PastelCoral, RoundedCornerShape(12.dp))
+                                    .border(1.5.dp, BlackInk, RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { tempSarvamKey = "" }
+                                    .padding(vertical = 10.dp, horizontal = 14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Clear",
+                                    tint = BlackInk,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val key = tempSarvamKey.trim()
+                        if (key.isBlank()) {
+                            viewModel.clearSarvamApiKey()
+                        } else {
+                            viewModel.updateSarvamApiKey(key)
+                        }
+                        showSarvamDialog = false
+                    }
+                ) {
+                    Text("Save Key", fontWeight = FontWeight.Bold, color = BlackInk)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSarvamDialog = false }) {
                     Text("Cancel", color = GrayText)
                 }
             },
@@ -338,7 +589,76 @@ fun SettingsScreen(
                     }
                 }
 
-                // AI Engine status & API Key Card
+                // AI Intelligence Section Header
+                item {
+                    Text(
+                        text = "AI INTELLIGENCE ENGINES",
+                        style = Typography.labelLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            letterSpacing = 1.sp,
+                            color = GrayText
+                        ),
+                        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                    )
+                }
+
+                // AI Pipeline Status Card
+                item {
+                    NeoCard(
+                        backgroundColor = if (hasGroqKey && hasSarvamKey) MainYellow else if (hasGroqKey || hasSarvamKey) PastelMint else WarmWhite,
+                        cornerRadius = 20.dp,
+                        shadowOffset = 2.5.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .background(BlackInk, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MainYellow,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = when {
+                                        hasGroqKey && hasSarvamKey -> "Dual AI Intelligence Active"
+                                        hasGroqKey -> "Groq High-Speed Vision Active"
+                                        hasSarvamKey -> "Sarvam Indic Intelligence Active"
+                                        else -> "Heuristic Local Fallback Active"
+                                    },
+                                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Black)
+                                )
+                            }
+                            Text(
+                                text = when {
+                                    hasGroqKey && hasSarvamKey ->
+                                        "⚡ 0.25s Groq VLM screenshot parsing coupled with 🇮🇳 Sarvam AI multilingual refinement (Hindi/Tamil/Telugu/Hinglish & college jargon)."
+                                    hasGroqKey ->
+                                        "⚡ Groq Qwen 27B Vision extracts commitments at 0.25s speed. Add Sarvam AI key below for Indic & college slang refinement."
+                                    hasSarvamKey ->
+                                        "🇮🇳 Sarvam AI Indic refinement active. Add a free Groq Cloud key below for instant 0.25s screenshot analysis."
+                                    else ->
+                                        "Add your Groq and Sarvam API keys below to unlock sub-second vision extraction and Indic college commitment tracking."
+                                },
+                                style = Typography.bodySmall.copy(color = BlackInk.copy(alpha = 0.85f), lineHeight = 18.sp)
+                            )
+                        }
+                    }
+                }
+
+                // Groq Cloud VLM Card
                 item {
                     NeoCard(
                         backgroundColor = WarmWhite,
@@ -351,47 +671,236 @@ fun SettingsScreen(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = "AI",
-                                    tint = BlackInk,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "AI Vision Engine",
-                                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .background(MainYellow, CircleShape)
+                                            .border(1.5.dp, BlackInk, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Bolt,
+                                            contentDescription = null,
+                                            tint = BlackInk,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Groq Cloud VLM",
+                                            style = Typography.titleMedium.copy(fontWeight = FontWeight.Black)
+                                        )
+                                        Text(
+                                            text = "qwen/qwen3.8-27b (0.25s VLM)",
+                                            style = Typography.bodySmall.copy(color = GrayText, fontSize = 11.sp)
+                                        )
+                                    }
+                                }
+
+                                // Status Badge
+                                Box(
+                                    modifier = Modifier
+                                        .background(if (hasGroqKey) SuccessGreen.copy(alpha = 0.2f) else PastelCoral, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (hasGroqKey) SuccessGreen else BlackInk, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(if (hasGroqKey) SuccessGreen else BlackInk, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (hasGroqKey) "0.25s Active" else "Not Set",
+                                            style = Typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = BlackInk,
+                                                fontSize = 11.sp
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Masked Key Preview Pill
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(CreamBackground, RoundedCornerShape(10.dp))
+                                    .border(1.dp, BlackInk.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Key: ${maskApiKey(groqApiKey)}",
+                                        style = Typography.bodySmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (hasGroqKey) BlackInk else GrayText
+                                        )
+                                    )
+                                    if (hasGroqKey) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Active",
+                                            tint = SuccessGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
                             }
 
                             Text(
-                                text = "Model: $activeModelDescription",
-                                style = Typography.bodyMedium.copy(color = BlackInk, fontWeight = FontWeight.SemiBold)
+                                text = "High-speed vision analyzer for extracting dates, deadlines, tasks, and events with 250ms latency.",
+                                style = Typography.bodySmall.copy(color = GrayText, lineHeight = 16.sp)
                             )
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            NeoButton(
+                                text = if (hasGroqKey) "Update Groq Key" else "Configure Groq API Key",
+                                onClick = {
+                                    tempGroqKey = groqApiKey
+                                    showGroqDialog = true
+                                },
+                                backgroundColor = if (hasGroqKey) WarmWhite else MainYellow,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Key,
+                                        contentDescription = null,
+                                        tint = BlackInk,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Sarvam AI Indic Engine Card
+                item {
+                    NeoCard(
+                        backgroundColor = WarmWhite,
+                        cornerRadius = 20.dp,
+                        shadowOffset = 2.5.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .background(PastelMint, CircleShape)
+                                            .border(1.5.dp, BlackInk, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Translate,
+                                            contentDescription = null,
+                                            tint = BlackInk,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Sarvam AI (Indic Engine)",
+                                            style = Typography.titleMedium.copy(fontWeight = FontWeight.Black)
+                                        )
+                                        Text(
+                                            text = "sarvam-2b (Indic / Multilingual)",
+                                            style = Typography.bodySmall.copy(color = GrayText, fontSize = 11.sp)
+                                        )
+                                    }
+                                }
+
+                                // Status Badge
                                 Box(
                                     modifier = Modifier
-                                        .size(10.dp)
-                                        .background(if (hasConfiguredKey) SuccessGreen else MainYellow, CircleShape)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (hasConfiguredKey) "AI Vision Active (Ready to Analyze)" else "API Key Missing (Local Fallback)",
-                                    style = Typography.bodySmall.copy(
-                                        color = if (hasConfiguredKey) BlackInk else GrayText,
-                                        fontWeight = if (hasConfiguredKey) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                )
+                                        .background(if (hasSarvamKey) SuccessGreen.copy(alpha = 0.2f) else LightGray, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (hasSarvamKey) SuccessGreen else BlackInk.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(if (hasSarvamKey) SuccessGreen else GrayText, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (hasSarvamKey) "Indic Active" else "Optional",
+                                            style = Typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = BlackInk,
+                                                fontSize = 11.sp
+                                            )
+                                        )
+                                    }
+                                }
                             }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            // Masked Key Preview Pill
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(CreamBackground, RoundedCornerShape(10.dp))
+                                    .border(1.dp, BlackInk.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Key: ${maskApiKey(sarvamApiKey)}",
+                                        style = Typography.bodySmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (hasSarvamKey) BlackInk else GrayText
+                                        )
+                                    )
+                                    if (hasSarvamKey) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Active",
+                                            tint = SuccessGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = "Refines Indian college jargon (IITM, AMET, Anna Univ), hackathons, and Indic languages (Hindi, Tamil, Telugu, Hinglish).",
+                                style = Typography.bodySmall.copy(color = GrayText, lineHeight = 16.sp)
+                            )
 
                             NeoButton(
-                                text = if (hasConfiguredKey) "Change AI Vision Key" else "Set AI Vision Key",
-                                onClick = { showKeyDialog = true },
-                                backgroundColor = if (hasConfiguredKey) WarmWhite else MainYellow,
+                                text = if (hasSarvamKey) "Update Sarvam Key" else "Configure Sarvam API Key",
+                                onClick = {
+                                    tempSarvamKey = sarvamApiKey
+                                    showSarvamDialog = true
+                                },
+                                backgroundColor = if (hasSarvamKey) WarmWhite else PastelMint,
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Key,

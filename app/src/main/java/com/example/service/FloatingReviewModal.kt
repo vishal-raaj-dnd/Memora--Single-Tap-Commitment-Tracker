@@ -126,7 +126,10 @@ class FloatingReviewModal(
             setTextColor(Color.parseColor("#111111"))
             typeface = Typeface.DEFAULT_BOLD
             setPadding(dp(8f), dp(4f), dp(8f), dp(4f))
-            setOnClickListener { dismiss() }
+            setOnClickListener {
+                dismiss()
+                onDismiss()
+            }
         }
         headerRow.addView(closeButton)
         rootCard.addView(headerRow)

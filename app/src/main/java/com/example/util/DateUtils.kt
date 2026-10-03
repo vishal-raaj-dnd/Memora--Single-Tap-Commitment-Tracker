@@ -6,7 +6,7 @@ import java.util.Locale
 
 /**
  * Robust date and time utilities for Memora.
- * Accurately categorizes and normalizes dates (Today, Tomorrow, Upcoming, ISO)
+ * Accurately categorizes and normalizes dates (Today, Tomorrow, Upcoming, Overdue, ISO)
  * without loose substring collisions or false-positive fallbacks.
  */
 object DateUtils {
@@ -16,8 +16,52 @@ object DateUtils {
     private val ISO_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE
 
     /**
+     * Parses a flexible date string into a LocalDate.
+     */
+    fun parseLocalDate(dateStr: String?): LocalDate? {
+        if (dateStr.isNullOrBlank()) return null
+        val clean = dateStr.trim()
+
+        if (clean.contains("Tomorrow", ignoreCase = true) || clean.contains("tmrw", ignoreCase = true) || clean.contains("t0ommorrow", ignoreCase = true)) {
+            return LocalDate.now().plusDays(1)
+        }
+        if (clean.contains("Today", ignoreCase = true) || clean.contains("tonight", ignoreCase = true)) {
+            return LocalDate.now()
+        }
+
+        // Clean any parenthetical annotations like "Tomorrow (Oct 02)" or "Next Week (Oct 05)"
+        val stripped = clean.replace("\\(.*\\)".toRegex(), "").trim()
+        val now = LocalDate.now()
+
+        val formattersWithYear = listOf(
+            DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US),
+            DateTimeFormatter.ofPattern("MMMM dd, yyyy", Locale.US)
+        )
+
+        for (formatter in formattersWithYear) {
+            try {
+                return LocalDate.parse(stripped, formatter)
+            } catch (_: Exception) {}
+        }
+
+        val formattersWithoutYear = listOf(
+            DateTimeFormatter.ofPattern("MMM dd", Locale.US),
+            DateTimeFormatter.ofPattern("MMMM dd", Locale.US)
+        )
+
+        for (formatter in formattersWithoutYear) {
+            try {
+                val tempMonthDay = java.time.MonthDay.parse(stripped, formatter)
+                return tempMonthDay.atYear(now.year)
+            } catch (_: Exception) {}
+        }
+
+        return null
+    }
+
+    /**
      * Checks if the date string corresponds to today.
-     * Never blindly defaults null to today.
      */
     fun isToday(dateStr: String?): Boolean {
         if (dateStr.isNullOrBlank()) return false
@@ -27,10 +71,14 @@ object DateUtils {
         }
         if (clean.contains("Today", ignoreCase = true)) return true
 
+        val parsed = parseLocalDate(clean)
+        if (parsed != null) {
+            return parsed == LocalDate.now()
+        }
+
         val today = LocalDate.now()
         val todayMonthDay = today.format(MONTH_DAY_FORMATTER)
         val todayIso = today.format(ISO_DATE_FORMATTER)
-
         return clean.contains(todayMonthDay, ignoreCase = true) || clean.contains(todayIso)
     }
 
@@ -44,19 +92,51 @@ object DateUtils {
             return true
         }
 
+        val parsed = parseLocalDate(clean)
+        if (parsed != null) {
+            return parsed == LocalDate.now().plusDays(1)
+        }
+
         val tomorrow = LocalDate.now().plusDays(1)
         val tomorrowMonthDay = tomorrow.format(MONTH_DAY_FORMATTER)
         val tomorrowIso = tomorrow.format(ISO_DATE_FORMATTER)
-
         return clean.contains(tomorrowMonthDay, ignoreCase = true) || clean.contains(tomorrowIso)
     }
 
     /**
-     * Checks if the date is in the future beyond tomorrow or an upcoming event.
+     * Checks if the commitment is overdue (past date and not completed).
+     */
+    fun isOverdue(dateStr: String?, isCompleted: Boolean = false): Boolean {
+        if (isCompleted || dateStr.isNullOrBlank()) return false
+        if (isToday(dateStr) || isTomorrow(dateStr)) return false
+
+        val parsed = parseLocalDate(dateStr) ?: return false
+        return parsed.isBefore(LocalDate.now())
+    }
+
+    /**
+     * Checks if the date is in the future beyond today.
      */
     fun isUpcoming(dateStr: String?): Boolean {
-        if (dateStr.isNullOrBlank()) return true // default unassigned date to upcoming/someday
-        return !isToday(dateStr) && !isTomorrow(dateStr)
+        if (dateStr.isNullOrBlank()) return true // unassigned date counts as someday/upcoming
+        if (isToday(dateStr)) return false
+        if (isTomorrow(dateStr)) return true
+
+        val parsed = parseLocalDate(dateStr)
+        return if (parsed != null) {
+            parsed.isAfter(LocalDate.now())
+        } else {
+            !isToday(dateStr)
+        }
+    }
+
+    /**
+     * Checks if a memory date matches a specific target calendar date.
+     */
+    fun matchesDate(dateStr: String?, target: LocalDate): Boolean {
+        if (dateStr.isNullOrBlank()) return false
+        val parsed = parseLocalDate(dateStr)
+        return parsed == target
     }
 
     /**
@@ -143,5 +223,9 @@ object DateUtils {
         if (isToday(dateStr)) return "Today"
         if (isTomorrow(dateStr)) return "Tomorrow"
         return dateStr
+    }
+
+    fun formatDisplayDate(date: LocalDate): String {
+        return date.format(FULL_DATE_FORMATTER)
     }
 }

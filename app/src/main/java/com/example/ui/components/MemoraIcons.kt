@@ -9,13 +9,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Handshake
-import androidx.compose.material.icons.outlined.Label
-import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RocketLaunch
@@ -39,16 +38,16 @@ object MemoraIcons {
     fun getCategoryIcon(key: String?): ImageVector {
         return when (key?.lowercase()) {
             "rocket", "hackathon" -> Icons.Outlined.RocketLaunch
-            "chat", "discussion" -> Icons.Outlined.Chat
+            "chat", "discussion" -> Icons.AutoMirrored.Outlined.Chat
             "science", "incubation", "flask" -> Icons.Outlined.Science
             "school", "amet", "university" -> Icons.Outlined.AccountBalance
-            "book", "eduvia" -> Icons.Outlined.MenuBook
+            "book", "eduvia" -> Icons.AutoMirrored.Outlined.MenuBook
             "graduation", "academics" -> Icons.Outlined.School
-            "calendar", "iitm", "clock", "time" -> Icons.Outlined.CalendarToday
+            "calendar", "iitm", "clock", "time" -> Icons.Outlined.CalendarMonth
             "target", "grit" -> Icons.Outlined.TrackChanges
             "document", "mint", "exam" -> Icons.Outlined.Description
             "person", "personal" -> Icons.Outlined.Person
-            else -> Icons.Outlined.Label
+            else -> Icons.AutoMirrored.Outlined.Label
         }
     }
 

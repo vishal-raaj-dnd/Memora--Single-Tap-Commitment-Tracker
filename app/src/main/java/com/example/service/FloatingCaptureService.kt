@@ -113,6 +113,11 @@ class FloatingCaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            android.widget.Toast.makeText(this, "Overlay permission required for floating capture", android.widget.Toast.LENGTH_LONG).show()
+            stopSelf()
+            return
+        }
         isServiceRunning = true
         startForeground(NOTIFICATION_ID, createForegroundNotification())
         setupFloatingView()
@@ -227,7 +232,7 @@ class FloatingCaptureService : Service() {
         val spinner = ProgressBar(this).apply {
             val pad = (6 * density).toInt()
             setPadding(pad, pad, pad, pad)
-            indeterminateDrawable?.setColorFilter(
+            indeterminateDrawable?.colorFilter = android.graphics.PorterDuffColorFilter(
                 android.graphics.Color.parseColor("#111111"),
                 android.graphics.PorterDuff.Mode.SRC_IN
             )
@@ -488,7 +493,11 @@ class FloatingCaptureService : Service() {
                                                 aiSummary = result.summary,
                                                 aiConfidence = result.confidence
                                             )
-                                            database.memoryDao().insertMemory(memoryItem)
+                                            val genId = database.memoryDao().insertMemory(memoryItem)
+                                            val savedWithId = memoryItem.copy(id = genId)
+                                            val rm = ReminderManager(this@FloatingCaptureService)
+                                            rm.scheduleReminder(savedWithId)
+                                            rm.showSavedConfirmationNotification(savedWithId)
                                             android.util.Log.i("FloatingCaptureService", "Saved memory to database: $title")
                                         }
                                     },
@@ -501,6 +510,11 @@ class FloatingCaptureService : Service() {
                                     },
                                     onDismiss = {
                                         activeModal = null
+                                        try {
+                                            if (file.exists()) {
+                                                file.delete()
+                                            }
+                                        } catch (_: Exception) {}
                                     }
                                 )
                                 activeModal?.show()
@@ -570,6 +584,10 @@ class FloatingCaptureService : Service() {
                     image.close()
                     virtualDisplay?.release()
                     imageReader.close()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        activeMediaProjection?.stop()
+                        activeMediaProjection = null
+                    }
                 }
             }, mainHandler)
 
@@ -603,7 +621,9 @@ class FloatingCaptureService : Service() {
         serviceScope.cancel()
         dismissTargetView?.let {
             try {
-                windowManager?.removeView(it)
+                if (it.isAttachedToWindow) {
+                    windowManager?.removeView(it)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -611,7 +631,9 @@ class FloatingCaptureService : Service() {
         dismissTargetView = null
         floatingView?.let {
             try {
-                windowManager?.removeView(it)
+                if (it.isAttachedToWindow) {
+                    windowManager?.removeView(it)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }

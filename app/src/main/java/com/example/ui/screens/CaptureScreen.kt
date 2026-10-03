@@ -54,14 +54,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.example.service.MediaProjectionPermissionActivity
+import com.example.ui.components.CommitmentDialog
 import com.example.ui.components.NeoButton
 import com.example.ui.components.NeoCard
 import com.example.ui.components.NeoDottedBackground
+import com.example.ui.components.VoiceCaptureDialog
 import com.example.ui.theme.BlackInk
 import com.example.ui.theme.CreamBackground
 import com.example.ui.theme.GrayText
 import com.example.ui.theme.MainYellow
+import com.example.ui.theme.PastelCoral
+import com.example.ui.theme.PastelYellow
 import com.example.ui.theme.Typography
 import com.example.ui.theme.WarmWhite
 import com.example.ui.viewmodel.MemoraViewModel
@@ -76,6 +87,59 @@ fun CaptureScreen(
 ) {
     val context = LocalContext.current
     val isFloatingServiceEnabled by viewModel.isFloatingServiceEnabled.collectAsState()
+    val categories by viewModel.allCategories.collectAsState()
+    val sarvamKey by viewModel.sarvamApiKey.collectAsState()
+    var showManualDialog by remember { mutableStateOf(false) }
+    var showVoiceDialog by remember { mutableStateOf(false) }
+
+    if (showVoiceDialog) {
+        VoiceCaptureDialog(
+            categories = categories,
+            onDismiss = { showVoiceDialog = false },
+            onParseVoice = { text, engine -> viewModel.parseVoiceInput(text, engine) },
+            onTranscribeAudio = { file, engine -> viewModel.transcribeAndParseAudio(file, engine) },
+            hasSarvamKey = sarvamKey.isNotBlank(),
+            onSaveCommitment = { title, catId, type, date, time, notes, isDeadline, reminder ->
+                viewModel.saveVoiceCommitment(
+                    title = title,
+                    categoryId = catId,
+                    type = type,
+                    date = date,
+                    time = time,
+                    notes = notes,
+                    isDeadline = isDeadline,
+                    reminderTime = reminder,
+                    onSaved = {
+                        showVoiceDialog = false
+                        onClose()
+                    }
+                )
+            }
+        )
+    }
+
+    if (showManualDialog) {
+        CommitmentDialog(
+            categories = categories,
+            existingItem = null,
+            onDismiss = { showManualDialog = false },
+            onSave = { title, catId, type, date, time, notes, reminderTime ->
+                viewModel.createManualMemory(
+                    title = title,
+                    categoryId = catId,
+                    type = type,
+                    date = date,
+                    time = time,
+                    notes = notes,
+                    reminderTime = reminderTime,
+                    onSaved = {
+                        showManualDialog = false
+                        onClose()
+                    }
+                )
+            }
+        )
+    }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -123,18 +187,22 @@ fun CaptureScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top close bar
+            // Symmetrical, balanced top bar
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Box(
                     modifier = Modifier
                         .testTag("capture_close_button")
-                        .size(40.dp)
+                        .size(42.dp)
                         .background(WarmWhite, CircleShape)
                         .border(1.75.dp, BlackInk, CircleShape)
                         .clip(CircleShape)
@@ -148,37 +216,129 @@ fun CaptureScreen(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+
+                Text(
+                    text = "Capture & Add",
+                    style = Typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        color = BlackInk
+                    )
+                )
+
+                // Spacer for exact horizontal symmetry
+                Spacer(modifier = Modifier.size(42.dp))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "Capture Memory",
-                style = Typography.displayMedium.copy(
+                text = "Capture Commitments",
+                style = Typography.headlineSmall.copy(
                     fontWeight = FontWeight.Black,
-                    fontSize = 26.sp,
-                    color = BlackInk
+                    fontSize = 23.sp,
+                    color = BlackInk,
+                    textAlign = TextAlign.Center
                 )
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Pick a screenshot from your gallery or use the floating button while in other apps.",
+                text = "Speak your schedule, pick screenshots, or add tasks manually.",
                 style = Typography.bodyMedium.copy(
                     color = GrayText,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     textAlign = TextAlign.Center
                 ),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Central Pulsing Capture Card (Direct Pick Visual Media)
+            // Action 1: Voice Hero Card (Sarvam & Groq AI)
             Box(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .scale(pulseScale)
+                    .clickable { showVoiceDialog = true }
+                    .testTag("capture_voice_card")
+            ) {
+                NeoCard(
+                    backgroundColor = MainYellow,
+                    cornerRadius = 22.dp,
+                    shadowOffset = 3.5.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .background(WarmWhite, CircleShape)
+                                .border(2.dp, BlackInk, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice",
+                                tint = BlackInk,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Speak Commitment",
+                                    style = Typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 17.sp,
+                                        color = BlackInk
+                                    )
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(BlackInk, RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "AI Voice",
+                                        style = Typography.labelSmall.copy(
+                                            color = MainYellow,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 9.sp
+                                        )
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "English, Hindi, or Hinglish · Instant smart parsing",
+                                style = Typography.bodySmall.copy(
+                                    color = BlackInk.copy(alpha = 0.8f),
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Action 2: Screenshot OCR Analyzer
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
                     .clickable {
                         photoPickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -187,56 +347,121 @@ fun CaptureScreen(
                     .testTag("capture_main_action_button")
             ) {
                 NeoCard(
-                    backgroundColor = MainYellow,
-                    cornerRadius = 28.dp,
-                    shadowOffset = 4.dp
+                    backgroundColor = WarmWhite,
+                    cornerRadius = 22.dp,
+                    shadowOffset = 3.dp
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 40.dp, vertical = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(72.dp)
-                                .background(WarmWhite, CircleShape)
+                                .size(54.dp)
+                                .background(PastelYellow, CircleShape)
                                 .border(2.dp, BlackInk, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PhotoLibrary,
-                                contentDescription = "Pick Screenshot",
+                                contentDescription = "Screenshot",
                                 tint = BlackInk,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
 
-                        Text(
-                            text = "Select Screenshot",
-                            style = Typography.titleLarge.copy(
-                                fontWeight = FontWeight.Black,
-                                fontSize = 19.sp,
-                                color = BlackInk
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Analyze Screenshot",
+                                style = Typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 17.sp,
+                                    color = BlackInk
+                                )
                             )
-                        )
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
-                        Text(
-                            text = "Tap to pick from device gallery",
-                            style = Typography.bodySmall.copy(
-                                color = BlackInk.copy(alpha = 0.75f),
-                                fontSize = 13.sp
+                            Text(
+                                text = "Pick from device gallery · Extracts tasks & dates",
+                                style = Typography.bodySmall.copy(
+                                    color = GrayText,
+                                    fontSize = 12.sp
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Floating Button Switch Card (Real system-wide overlay)
+            // Action 3: Quick Manual Entry
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showManualDialog = true }
+                    .testTag("capture_add_manually_button")
+            ) {
+                NeoCard(
+                    backgroundColor = WarmWhite,
+                    cornerRadius = 22.dp,
+                    shadowOffset = 3.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .background(PastelCoral.copy(alpha = 0.45f), CircleShape)
+                                .border(2.dp, BlackInk, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add",
+                                tint = BlackInk,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Add Manually",
+                                style = Typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 17.sp,
+                                    color = BlackInk
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "Custom commitment, deadline, date & reminder",
+                                style = Typography.bodySmall.copy(
+                                    color = GrayText,
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Floating Button Switch Card (System-wide overlay)
             NeoCard(
                 backgroundColor = WarmWhite,
                 cornerRadius = 20.dp,
@@ -248,12 +473,20 @@ fun CaptureScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Layers,
-                            contentDescription = "Floating Overlay",
-                            tint = BlackInk,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(CreamBackground, CircleShape)
+                                .border(1.5.dp, BlackInk, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Layers,
+                                contentDescription = "Floating Overlay",
+                                tint = BlackInk,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -291,16 +524,16 @@ fun CaptureScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Memora uses a floating capture button so you can capture anything while using other apps without opening Memora first.",
+                        text = "Memora draws a draggable button over other apps so you can capture tasks instantly without switching.",
                         style = Typography.bodySmall.copy(fontSize = 12.sp, color = GrayText, lineHeight = 16.sp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

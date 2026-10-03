@@ -184,8 +184,9 @@ fun MemoraApp(
                 CategoriesScreen(
                     viewModel = viewModel,
                     onCategoryClick = { categoryId ->
-                        viewModel.setSelectedFilter("All")
+                        viewModel.setSelectedFilter(categoryId)
                         viewModel.setSearchQuery("")
+                        viewModel.setTimelineTab("Upcoming")
                         navController.navigate(Destinations.TIMELINE)
                     }
                 )

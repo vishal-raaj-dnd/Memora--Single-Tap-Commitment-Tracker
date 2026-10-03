@@ -28,6 +28,9 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
     suspend fun deleteById(id: Long) =
         memoryDao.deleteMemoryById(id)
 
+    suspend fun reassignCategory(oldCatId: String, newCatId: String) =
+        memoryDao.reassignCategory(oldCatId, newCatId)
+
     suspend fun deleteAll() =
         memoryDao.deleteAll()
 }

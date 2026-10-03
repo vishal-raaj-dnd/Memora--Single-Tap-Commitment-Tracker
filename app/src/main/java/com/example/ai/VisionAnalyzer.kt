@@ -9,6 +9,8 @@ interface VisionAnalyzer {
         bitmap: Bitmap,
         categories: List<Category> = Category.DEFAULT_CATEGORIES,
         userCorrections: List<CategoryCorrection> = emptyList(),
-        apiKeyOverride: String? = null
+        apiKeyOverride: String? = null,
+        sarvamApiKeyOverride: String? = null,
+        groqApiKeyOverride: String? = null
     ): ExtractedMemory
 }

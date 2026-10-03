@@ -5,7 +5,7 @@ import com.example.data.model.MemoryType
 data class ExtractedMemory(
     val title: String,
     val description: String,
-    val type: MemoryType,
+    val type: MemoryType = MemoryType.TASK,
     val suggestedCategoryId: String,
     val categoryName: String,
     val date: String? = null,
@@ -20,5 +20,6 @@ data class ExtractedMemory(
     val ambiguityQuestion: String? = null,
     val ambiguityOptions: List<String> = emptyList(),
     val ambiguityField: String? = null,
-    val normalizedDate: String? = null
+    val normalizedDate: String? = null,
+    val engineUsed: String? = null
 )

@@ -34,31 +34,18 @@ abstract class MemoraDatabase : RoomDatabase() {
                     MemoraDatabase::class.java,
                     "memora_database"
                 )
-                    .fallbackToDestructiveMigration()
-                    .addCallback(DatabaseCallback(scope))
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val existing = instance.categoryDao().getAllCategoriesSync()
+                        if (existing.isEmpty()) {
+                            instance.categoryDao().insertCategories(Category.DEFAULT_CATEGORIES)
+                        }
+                    } catch (_: Exception) {}
+                }
                 instance
-            }
-        }
-
-        private class DatabaseCallback(private val scope: CoroutineScope) : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                INSTANCE?.let { database ->
-                    scope.launch(Dispatchers.IO) {
-                        populateInitialData(database.categoryDao(), database.memoryDao())
-                    }
-                }
-            }
-
-            override fun onDestructiveMigration(db: SupportSQLiteDatabase) {
-                super.onDestructiveMigration(db)
-                INSTANCE?.let { database ->
-                    scope.launch(Dispatchers.IO) {
-                        populateInitialData(database.categoryDao(), database.memoryDao())
-                    }
-                }
             }
         }
 

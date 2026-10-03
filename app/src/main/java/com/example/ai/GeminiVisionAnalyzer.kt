@@ -39,22 +39,31 @@ class GeminiVisionAnalyzer : VisionAnalyzer {
         bitmap: Bitmap,
         categories: List<Category>,
         userCorrections: List<CategoryCorrection>,
-        apiKeyOverride: String?
+        apiKeyOverride: String?,
+        sarvamApiKeyOverride: String?,
+        groqApiKeyOverride: String?
     ): ExtractedMemory = withContext(Dispatchers.IO) {
         val base64Image = bitmapToBase64(bitmap)
         val prompt = buildAnalysisPrompt(categories, userCorrections)
 
-        // 1. Identify configured keys for Groq and Gemini
+        // 1. Identify configured keys for Groq, Gemini, and Sarvam
         val groqKey = when {
-            apiKeyOverride?.startsWith("gsk_") == true -> apiKeyOverride
+            groqApiKeyOverride?.isNotBlank() == true -> groqApiKeyOverride.trim()
+            apiKeyOverride?.startsWith("gsk_") == true -> apiKeyOverride.trim()
+            apiKeyOverride?.isNotBlank() == true && !apiKeyOverride.startsWith("AIza") && !apiKeyOverride.startsWith("AQ.") -> apiKeyOverride.trim()
             else -> try { BuildConfig.GROQ_API_KEY } catch (_: Exception) { "" }
-        }.takeIf { it.startsWith("gsk_") }
+        }.takeIf { it.isNotBlank() && it != "MY_GROQ_API_KEY" }
 
         val geminiKey = when {
-            apiKeyOverride?.startsWith("gsk_") == true -> try { BuildConfig.GEMINI_API_KEY } catch (_: Exception) { "" }
-            apiKeyOverride?.isNotBlank() == true -> apiKeyOverride
+            apiKeyOverride?.startsWith("AIza") == true || apiKeyOverride?.startsWith("AQ.") == true -> apiKeyOverride.trim()
             else -> try { BuildConfig.GEMINI_API_KEY } catch (_: Exception) { "" }
-        }.takeIf { it.startsWith("AIza") || it.startsWith("AQ.") }
+        }.takeIf { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }
+
+        val sarvamKey = sarvamApiKeyOverride?.trim()?.takeIf { it.isNotBlank() && it != "MY_SARVAM_API_KEY" }
+            ?: try {
+                val field = BuildConfig::class.java.getField("SARVAM_API_KEY")
+                field.get(null) as? String
+            } catch (_: Exception) { "" }?.takeIf { it.isNotBlank() && it != "MY_SARVAM_API_KEY" }
 
         // If no valid AI key exists, guide user directly instead of waiting for failed network timeouts
         if (groqKey == null && geminiKey == null) {
@@ -71,7 +80,7 @@ class GeminiVisionAnalyzer : VisionAnalyzer {
                 date = formattedDate,
                 time = null,
                 isDeadline = false,
-                summary = "AI Vision unconfigured. Open Settings -> AI Vision Engine to paste your free Groq key.",
+                summary = "AI Vision unconfigured. Open Settings -> AI Vision Engine to paste your free Groq or Sarvam key.",
                 confidence = 0.5f,
                 hasAmbiguity = true,
                 ambiguityQuestion = "Add your Groq API key in Settings to activate instant 0.25s VLM extraction.",
@@ -80,17 +89,18 @@ class GeminiVisionAnalyzer : VisionAnalyzer {
         }
 
         // 2. Attempt Groq VLM first if configured (sub-second 0.25s inference)
+        var extracted: ExtractedMemory? = null
         if (groqKey != null) {
             Log.i("VisionAnalyzer", "Attempting ultra-fast Groq VLM inference with qwen/qwen3.8-27b")
             val groqResult = callGroqVisionApi(base64Image, prompt, groqKey, "qwen/qwen3.8-27b", categories)
             if (groqResult != null) {
                 Log.i("VisionAnalyzer", "Groq VLM extraction successful: '${groqResult.title}'")
-                return@withContext groqResult
+                extracted = groqResult
             }
         }
 
-        // 3. Attempt Gemini VLM (gemini-3.5-flash-lite primary)
-        if (geminiKey != null) {
+        // 3. Attempt Gemini VLM (gemini-3.5-flash-lite primary) if Groq did not extract
+        if (extracted == null && geminiKey != null) {
             val candidateGeminiModels = listOf(
                 "gemini-3.5-flash-lite",
                 "gemini-2.5-flash",
@@ -103,13 +113,72 @@ class GeminiVisionAnalyzer : VisionAnalyzer {
                 val geminiResult = callGeminiVisionApi(base64Image, prompt, geminiKey, model, categories)
                 if (geminiResult != null) {
                     Log.i("VisionAnalyzer", "Gemini VLM extraction successful with $model: '${geminiResult.title}'")
-                    return@withContext geminiResult
+                    extracted = geminiResult
+                    break
                 }
             }
         }
 
-        Log.w("VisionAnalyzer", "All cloud VLM endpoints failed or unconfigured, utilizing dynamic local analyzer")
-        return@withContext dynamicLocalAnalysis(categories)
+        val primaryResult = extracted ?: dynamicLocalAnalysis(categories)
+
+        // 4. If Sarvam AI is configured, refine Indic languages, Indian college contexts & summaries
+        if (sarvamKey != null && primaryResult.confidence > 0.4f) {
+            return@withContext callSarvamRefineApi(primaryResult, sarvamKey)
+        }
+
+        return@withContext primaryResult
+    }
+
+    private fun callSarvamRefineApi(draft: ExtractedMemory, sarvamKey: String): ExtractedMemory {
+        return try {
+            val jsonBody = JSONObject().apply {
+                put("model", "sarvam-2b")
+                val messages = JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "system")
+                        put("content", "You are an assistant specialized in Indian academic, college (IITM, AMET, Anna Univ), hackathons, and Indic language contexts (Hindi, Tamil, Telugu, Hinglish). Refine the extracted commitment into clear, concise English title and summary. Return strictly a JSON object with 'title' and 'summary' keys.")
+                    })
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", "Title: ${draft.title}\nCategory: ${draft.categoryName}\nDescription: ${draft.description}")
+                    })
+                }
+                put("messages", messages)
+                put("temperature", 0.1)
+            }
+
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonBody.toString().toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url("https://api.sarvam.ai/v1/chat/completions")
+                .header("api-subscription-key", sarvamKey)
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseString = response.body?.string()
+
+            if (response.isSuccessful && !responseString.isNullOrBlank()) {
+                val json = JSONObject(responseString)
+                val choices = json.optJSONArray("choices")
+                if (choices != null && choices.length() > 0) {
+                    val content = choices.getJSONObject(0).getJSONObject("message").getString("content")
+                    val cleanJson = content.replace("```json", "").replace("```", "").trim()
+                    val parsed = JSONObject(cleanJson)
+                    val refinedTitle = parsed.optString("title").takeIf { it.isNotBlank() } ?: draft.title
+                    val refinedSummary = parsed.optString("summary").takeIf { it.isNotBlank() } ?: draft.summary
+                    Log.i("VisionAnalyzer", "Sarvam Indic refinement completed: '$refinedTitle'")
+                    return draft.copy(
+                        title = refinedTitle,
+                        summary = refinedSummary
+                    )
+                }
+            }
+            draft
+        } catch (e: Exception) {
+            Log.w("VisionAnalyzer", "Sarvam Indic refinement skipped or error: ${e.message}")
+            draft
+        }
     }
 
     private fun callGroqVisionApi(

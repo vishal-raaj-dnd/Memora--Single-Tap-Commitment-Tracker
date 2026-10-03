@@ -13,6 +13,7 @@ import com.example.BuildConfig
 import com.example.ai.ExtractedMemory
 import com.example.ai.GeminiVisionAnalyzer
 import com.example.ai.VisionAnalyzer
+import com.example.ai.VoiceCommitmentParser
 import com.example.data.local.MemoraDatabase
 import com.example.data.model.Category
 import com.example.data.model.CategoryCorrection
@@ -62,6 +63,7 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
     private val categoryRepo = CategoryRepository(database.categoryDao())
     private val correctionDao = database.categoryCorrectionDao()
     private val visionAnalyzer: VisionAnalyzer = GeminiVisionAnalyzer()
+    private val voiceParser = VoiceCommitmentParser()
     private val reminderManager = ReminderManager(application)
 
     val allMemories: StateFlow<List<MemoryItem>> = memoryRepo.allMemories
@@ -74,6 +76,22 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
         prefs.getString("custom_api_key", null) ?: try { BuildConfig.GEMINI_API_KEY } catch (_: Exception) { "" }
     )
     val userApiKey = _userApiKey.asStateFlow()
+
+    private val _groqApiKey = MutableStateFlow(
+        prefs.getString("groq_api_key", null)
+            ?: prefs.getString("custom_api_key", null)?.takeIf { it.startsWith("gsk_") }
+            ?: try { BuildConfig.GROQ_API_KEY } catch (_: Exception) { "" }
+    )
+    val groqApiKey = _groqApiKey.asStateFlow()
+
+    private val _sarvamApiKey = MutableStateFlow(
+        prefs.getString("sarvam_api_key", "")
+            ?: try {
+                val field = BuildConfig::class.java.getField("SARVAM_API_KEY")
+                (field.get(null) as? String) ?: ""
+            } catch (_: Exception) { "" }
+    )
+    val sarvamApiKey = _sarvamApiKey.asStateFlow()
 
     private val _userName = MutableStateFlow(
         prefs.getString("user_name", "Vishal") ?: "Vishal"
@@ -175,11 +193,46 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun updateCustomApiKey(key: String) {
-        _userApiKey.value = key
-        prefs.edit().putString("custom_api_key", key).apply()
+        val trimmed = key.trim()
+        _userApiKey.value = trimmed
+        prefs.edit().putString("custom_api_key", trimmed).apply()
+        if (trimmed.startsWith("gsk_")) {
+            _groqApiKey.value = trimmed
+            prefs.edit().putString("groq_api_key", trimmed).apply()
+        }
     }
 
     fun updateApiKey(key: String) = updateCustomApiKey(key)
+
+    fun updateGroqApiKey(key: String) {
+        val trimmed = key.trim()
+        _groqApiKey.value = trimmed
+        prefs.edit().putString("groq_api_key", trimmed).apply()
+        if (trimmed.isNotBlank()) {
+            _userApiKey.value = trimmed
+            prefs.edit().putString("custom_api_key", trimmed).apply()
+        }
+    }
+
+    fun clearGroqApiKey() {
+        _groqApiKey.value = ""
+        prefs.edit().remove("groq_api_key").apply()
+        if (_userApiKey.value.startsWith("gsk_")) {
+            _userApiKey.value = ""
+            prefs.edit().remove("custom_api_key").apply()
+        }
+    }
+
+    fun updateSarvamApiKey(key: String) {
+        val trimmed = key.trim()
+        _sarvamApiKey.value = trimmed
+        prefs.edit().putString("sarvam_api_key", trimmed).apply()
+    }
+
+    fun clearSarvamApiKey() {
+        _sarvamApiKey.value = ""
+        prefs.edit().remove("sarvam_api_key").apply()
+    }
 
     fun updateUserName(name: String) {
         val trimmed = name.trim().ifBlank { "User" }
@@ -277,7 +330,9 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
                         bitmap = bitmap,
                         categories = categories,
                         userCorrections = corrections,
-                        apiKeyOverride = _userApiKey.value
+                        apiKeyOverride = _userApiKey.value.takeIf { it.isNotBlank() },
+                        sarvamApiKeyOverride = _sarvamApiKey.value.takeIf { it.isNotBlank() },
+                        groqApiKeyOverride = _groqApiKey.value.takeIf { it.isNotBlank() }
                     )
                 }
 
@@ -341,6 +396,7 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
         time: String?,
         notes: String?,
         isDeadline: Boolean,
+        reminderTime: String? = null,
         onSaved: () -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -359,6 +415,7 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
                 correctionDao.insertCorrection(correction)
             }
 
+            val defaultReminder = if (isDeadline) "1 day before" else "1 hour before"
             val newItem = MemoryItem(
                 title = title.ifBlank { current?.title ?: "Captured Memory" },
                 description = current?.description ?: "",
@@ -367,7 +424,7 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
                 date = date ?: current?.date,
                 time = time ?: current?.time,
                 isDeadline = isDeadline,
-                reminderTime = if (isDeadline) "1 day before" else "1 hour before",
+                reminderTime = reminderTime ?: defaultReminder,
                 people = current?.people?.joinToString(", "),
                 organization = current?.organization,
                 source = "Screenshot",
@@ -381,9 +438,142 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
             val savedWithId = newItem.copy(id = generatedId)
             _lastSavedItem.value = savedWithId
 
-            // Trigger notification confirmation
-            reminderManager.showReminderNotification(savedWithId)
+            // Trigger exact alarm scheduling & notification confirmation
+            reminderManager.scheduleReminder(savedWithId)
+            reminderManager.showSavedConfirmationNotification(savedWithId)
 
+            viewModelScope.launch(Dispatchers.Main) {
+                onSaved()
+            }
+        }
+    }
+
+    fun createManualMemory(
+        title: String,
+        categoryId: String,
+        type: MemoryType,
+        date: String?,
+        time: String?,
+        notes: String?,
+        reminderTime: String? = null,
+        onSaved: () -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val defaultReminder = if (type == MemoryType.DEADLINE) "1 day before" else "1 hour before"
+            val newItem = MemoryItem(
+                title = title.trim().ifBlank { "New Commitment" },
+                description = notes ?: "Manually entered commitment",
+                type = type,
+                categoryId = categoryId,
+                date = date,
+                time = time,
+                isDeadline = type == MemoryType.DEADLINE,
+                reminderTime = reminderTime ?: defaultReminder,
+                source = "Manual",
+                sourceApp = "Memora",
+                originalScreenshotUri = "",
+                aiSummary = notes,
+                aiConfidence = 1.0f,
+                notes = notes
+            )
+            val generatedId = memoryRepo.insertMemory(newItem)
+            val savedWithId = newItem.copy(id = generatedId)
+            _lastSavedItem.value = savedWithId
+            reminderManager.scheduleReminder(savedWithId)
+            reminderManager.showSavedConfirmationNotification(savedWithId)
+            viewModelScope.launch(Dispatchers.Main) {
+                onSaved()
+            }
+        }
+    }
+
+    suspend fun parseVoiceInput(spokenText: String, preferredEngine: String? = null): ExtractedMemory {
+        return voiceParser.parseVoiceCommitment(
+            spokenText = spokenText,
+            categories = allCategories.value,
+            groqApiKey = _groqApiKey.value.takeIf { it.isNotBlank() },
+            sarvamApiKey = _sarvamApiKey.value.takeIf { it.isNotBlank() },
+            geminiApiKey = _userApiKey.value.takeIf { it.isNotBlank() },
+            preferredEngine = preferredEngine
+        )
+    }
+
+    /**
+     * End-to-end voice pipeline: Transcribes user audio using Sarvam Saaras STT (saaras:v3),
+     * then extracts structured commitment details (title, category, date, time) via Sarvam-105b LLM.
+     */
+    suspend fun transcribeAndParseAudio(audioFile: File, preferredEngine: String? = null): ExtractedMemory {
+        val sarvamKey = _sarvamApiKey.value.takeIf { it.isNotBlank() }
+        val groqKey = _groqApiKey.value.takeIf { it.isNotBlank() }
+        val categories = allCategories.value
+
+        var transcribedText: String? = null
+        if (!sarvamKey.isNullOrBlank() && (preferredEngine == "SARVAM" || preferredEngine == "AUTO" || preferredEngine == null)) {
+            transcribedText = voiceParser.transcribeAudioWithSarvam(audioFile, sarvamKey)
+        }
+
+        if (!transcribedText.isNullOrBlank()) {
+            val parsed = voiceParser.parseVoiceCommitment(
+                spokenText = transcribedText,
+                categories = categories,
+                groqApiKey = groqKey,
+                sarvamApiKey = sarvamKey,
+                geminiApiKey = _userApiKey.value.takeIf { it.isNotBlank() },
+                preferredEngine = preferredEngine
+            )
+            return parsed.copy(
+                description = transcribedText,
+                summary = "🎙️ Sarvam Voice: \"$transcribedText\"",
+                engineUsed = "Sarvam Saaras STT"
+            )
+        }
+
+        // If audio transcription failed or no key
+        return ExtractedMemory(
+            title = "",
+            description = if (sarvamKey.isNullOrBlank()) "No Sarvam API key configured in Settings" else "Could not transcribe audio. Please check your network or try again.",
+            type = MemoryType.TASK,
+            suggestedCategoryId = categories.firstOrNull()?.id ?: "personal",
+            categoryName = categories.firstOrNull()?.name ?: "Personal",
+            date = LocalDate.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.US)),
+            engineUsed = "Transcription Failed"
+        )
+    }
+
+    fun saveVoiceCommitment(
+        title: String,
+        categoryId: String,
+        type: MemoryType,
+        date: String?,
+        time: String?,
+        notes: String?,
+        isDeadline: Boolean,
+        reminderTime: String? = null,
+        onSaved: () -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val defaultReminder = if (isDeadline) "1 day before" else "1 hour before"
+            val newItem = MemoryItem(
+                title = title.trim().ifBlank { "Voice Commitment" },
+                description = notes ?: "Voice captured commitment",
+                type = type,
+                categoryId = categoryId,
+                date = date,
+                time = time,
+                isDeadline = isDeadline,
+                reminderTime = reminderTime ?: defaultReminder,
+                source = "Voice",
+                sourceApp = "Memora Voice",
+                originalScreenshotUri = "",
+                aiSummary = notes,
+                aiConfidence = 0.96f,
+                notes = notes
+            )
+            val generatedId = memoryRepo.insertMemory(newItem)
+            val savedWithId = newItem.copy(id = generatedId)
+            _lastSavedItem.value = savedWithId
+            reminderManager.scheduleReminder(savedWithId)
+            reminderManager.showSavedConfirmationNotification(savedWithId)
             viewModelScope.launch(Dispatchers.Main) {
                 onSaved()
             }
@@ -392,9 +582,16 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleComplete(item: MemoryItem) {
         viewModelScope.launch(Dispatchers.IO) {
-            memoryRepo.updateMemory(item.copy(isCompleted = !item.isCompleted, updatedAt = System.currentTimeMillis()))
+            val newCompleted = !item.isCompleted
+            val updated = item.copy(isCompleted = newCompleted, updatedAt = System.currentTimeMillis())
+            memoryRepo.updateMemory(updated)
+            if (newCompleted) {
+                reminderManager.cancelReminder(item.id)
+            } else {
+                reminderManager.scheduleReminder(updated)
+            }
             if (_selectedMemory.value?.id == item.id) {
-                _selectedMemory.value = item.copy(isCompleted = !item.isCompleted)
+                _selectedMemory.value = updated
             }
         }
     }
@@ -408,8 +605,39 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun updateMemoryDetails(
+        id: Long,
+        title: String,
+        categoryId: String,
+        type: MemoryType,
+        date: String?,
+        time: String?,
+        notes: String?,
+        reminderTime: String? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = allMemories.value.find { it.id == id } ?: return@launch
+            val updated = existing.copy(
+                title = title.trim().ifBlank { existing.title },
+                categoryId = categoryId,
+                type = type,
+                date = date,
+                time = time,
+                notes = notes,
+                reminderTime = reminderTime ?: existing.reminderTime,
+                isDeadline = type == MemoryType.DEADLINE,
+                updatedAt = System.currentTimeMillis()
+            )
+            memoryRepo.updateMemory(updated)
+            reminderManager.cancelReminder(id)
+            reminderManager.scheduleReminder(updated)
+            _selectedMemory.value = updated
+        }
+    }
+
     fun deleteMemory(item: MemoryItem) {
         viewModelScope.launch(Dispatchers.IO) {
+            reminderManager.cancelReminder(item.id)
             item.originalScreenshotUri?.let { uri ->
                 try {
                     val file = File(uri)
@@ -428,6 +656,14 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearAllData() {
         viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val memoriesDir = File(context.filesDir, "memories")
+                if (memoriesDir.exists()) {
+                    memoriesDir.listFiles()?.forEach { it.delete() }
+                }
+            } catch (_: Exception) {}
+            allMemories.value.forEach { reminderManager.cancelReminder(it.id) }
             memoryRepo.deleteAll()
             categoryRepo.insertCategories(Category.DEFAULT_CATEGORIES)
             _selectedMemory.value = null
@@ -445,6 +681,15 @@ class MemoraViewModel(application: Application) : AndroidViewModel(application) 
                 displayOrder = allCategories.value.size
             )
             categoryRepo.insertCategory(newCategory)
+        }
+    }
+
+    fun deleteCategory(category: Category) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Cannot delete default categories
+            if (Category.DEFAULT_CATEGORIES.any { it.id == category.id }) return@launch
+            memoryRepo.reassignCategory(category.id, "personal")
+            categoryRepo.deleteCategory(category)
         }
     }
 

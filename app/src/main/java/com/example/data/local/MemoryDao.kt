@@ -38,6 +38,12 @@ interface MemoryDao {
     @Query("DELETE FROM memories WHERE id = :id")
     suspend fun deleteMemoryById(id: Long)
 
+    @Query("SELECT * FROM memories WHERE isCompleted = 0")
+    suspend fun getUncompletedMemoriesSync(): List<MemoryItem>
+
+    @Query("UPDATE memories SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun reassignCategory(oldCategoryId: String, newCategoryId: String)
+
     @Query("DELETE FROM memories")
     suspend fun deleteAll()
 }
