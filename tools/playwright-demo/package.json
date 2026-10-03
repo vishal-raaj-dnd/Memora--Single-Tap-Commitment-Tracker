@@ -1,0 +1,12 @@
+{
+  "name": "memora-playwright-demo",
+  "version": "1.0.0",
+  "description": "Automated 15-second viral demo video recorder for Memora",
+  "main": "record_demo.js",
+  "scripts": {
+    "record": "node record_demo.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
