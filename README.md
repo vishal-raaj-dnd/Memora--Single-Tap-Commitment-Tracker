@@ -1,42 +1,32 @@
 <table>
-  <tr>
-    <td width="62%" valign="middle" style="border: none;">
-      <div align="left">
-        <span style="background: #FFE600; color: #1E1E1E; font-weight: 900; font-size: 13px; padding: 4px 12px; border: 2px solid #1E1E1E; border-radius: 8px;">⚡ AMBIENT AI FOR ANDROID</span>
-        <h1>Memora — Single-Tap Commitment Tracker</h1>
-        <p><b>Capture deadlines, events, and tasks from your screen with a single tap—without ever leaving WhatsApp, Gmail, or your browser.</b></p>
-        
-        <p>
-          <a href="https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/raw/main/Memora.apk">
-            <img src="https://img.shields.io/badge/Direct_Download-Memora.apk-00E599?style=for-the-badge&logo=android&logoColor=black" alt="Download APK" />
-          </a>
-          <a href="https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker">
-            <img src="https://img.shields.io/badge/Platform-Android_9.0+-FF5722?style=for-the-badge&logo=android&logoColor=white" alt="Platform" />
-          </a>
-          <a href="https://sarvam.ai">
-            <img src="https://img.shields.io/badge/Voice_STT-Sarvam_Saaras_AI-FFE600?style=for-the-badge&logoColor=black" alt="Sarvam AI" />
-          </a>
-          <a href="LICENSE">
-            <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" />
-          </a>
-        </p>
+<tr>
+<td width="65%" valign="top">
 
-        <ul style="line-height: 1.6;">
-          <li>🔴 <b>Single-Tap Floating Overlay</b>: Captures & extracts deadlines over any active app.</li>
-          <li>🎙️ <b>Indian Multilingual Voice STT</b>: Powered by Sarvam Saaras AI (Hindi, Tamil, Telugu, Hinglish).</li>
-          <li>📅 <b>Interactive Timeline & Calendar</b>: 1-tap "+ Add for Day" and instant cross-app sync.</li>
-          <li>🔒 <b>100% Local-First & Private</b>: All tasks stored on-device in SQLite Room DB.</li>
-        </ul>
-      </div>
-    </td>
-    <td width="38%" align="center" valign="middle" style="border: none;">
-      <a href="memora_15s_real_clip.mp4" title="Click to view full quality MP4">
-        <img src="docs/memora_demo.gif" width="280" alt="Memora 15s Live Demo" style="border: 3.5px solid #1E1E1E; border-radius: 24px; box-shadow: 6px 6px 0px #FFE600;" />
-      </a>
-      <br>
-      <sub>⚡ <b>Live 15s Demo on OnePlus 8</b><br><i>Tap floating button ➔ Instant AI Extraction</i></sub>
-    </td>
-  </tr>
+# Memora — Single-Tap Commitment Tracker
+
+> **Capture deadlines, events, and tasks from your screen with a single tap—without ever leaving WhatsApp, Gmail, or your browser.**
+
+<a href="https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker/raw/main/Memora.apk"><img src="https://img.shields.io/badge/Direct_Download-Memora.apk-00E599?style=for-the-badge&logo=android&logoColor=black" alt="Download APK" /></a>
+<a href="https://github.com/vishal-raaj-dnd/Memora--Single-Tap-Commitment-Tracker"><img src="https://img.shields.io/badge/Platform-Android_9.0+-FF5722?style=for-the-badge&logo=android&logoColor=white" alt="Platform" /></a>
+<a href="https://sarvam.ai"><img src="https://img.shields.io/badge/Voice_STT-Sarvam_Saaras_AI-FFE600?style=for-the-badge&logoColor=black" alt="Sarvam AI" /></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" /></a>
+
+- 🔴 **Single-Tap Floating Overlay**: Captures & extracts deadlines over any active app.
+- 🎙️ **Indian Multilingual Voice STT**: Powered by Sarvam Saaras AI (Hindi, Tamil, Telugu, Hinglish).
+- 📅 **Interactive Timeline & Calendar**: 1-tap "+ Add for Day" and instant cross-app sync.
+- 🔒 **100% Local-First & Private**: All tasks stored on-device in SQLite Room DB.
+
+</td>
+<td width="35%" align="center" valign="top">
+
+<a href="memora_15s_real_clip.mp4" title="Click to view full quality MP4">
+<img src="docs/memora_demo.gif" width="280" alt="Memora 15s Live Demo" />
+</a>
+<br>
+<sub>⚡ <b>Live 15s Demo on OnePlus 8</b><br><i>Tap floating button ➔ Instant AI Extraction</i></sub>
+
+</td>
+</tr>
 </table>
 
 ---
